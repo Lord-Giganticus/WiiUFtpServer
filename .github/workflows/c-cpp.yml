@@ -14,6 +14,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Update permissions
+      run: chmod +rwx build.sh
     - name: Build
       run: ./build.sh
     - name: Upload files
