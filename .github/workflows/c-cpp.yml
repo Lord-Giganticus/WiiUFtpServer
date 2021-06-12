@@ -26,10 +26,12 @@ jobs:
           _sdCard
           _loadiine
     - name: Zip Files
-      uses: actions/download-artifact@v2
-      with: 
-        name: Build
-        path: Build.zip
+      uses: papeloto/action-zip@v1
+      with:
+          files: |
+            _sdCard
+            _loadiine
+          dest: Build.zip
     - name: Make a release
       uses: "marvinpinto/action-automatic-releases@latest"
       with:
