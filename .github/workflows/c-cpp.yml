@@ -23,10 +23,10 @@ jobs:
       with:
         name: Build
         path : |
-          _sdCard\
-          _loadiine\
+          _sdCard
+          _loadiine
     - name: Install 7zip
-      run: apt-get install -y --no-install-recommends p7zip-full
+      run: apt-get install -y p7zip-full
     - name: Zip Files
       run: |
         cd _loadiine
