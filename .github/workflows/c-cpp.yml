@@ -26,12 +26,10 @@ jobs:
           _sdCard
           _loadiine
     - name: Zip Files
-      run: |
-        cd _loadiine
-        7z a ../Build.zip *.* -r
-        cd ../
-        cd _sdCard
-        7z a ../Build.zip *.* -r
+      uses: actions/download-artifact@v2
+      with: 
+        name: Build
+        path: Build.zip
     - name: Make a release
       uses: "marvinpinto/action-automatic-releases@latest"
       with:
