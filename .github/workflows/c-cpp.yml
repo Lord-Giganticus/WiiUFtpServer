@@ -7,7 +7,7 @@ on:
     branches: [ WUT ]
 
 jobs:
-  build:
+  build_WUT:
 
     runs-on: ubuntu-latest
     container: devkitpro/devkitppc:latest
@@ -21,20 +21,51 @@ jobs:
     - name: Upload files
       uses: actions/upload-artifact@v2
       with:
-        name: Build
+        name: Binaries
         path : |
           _sdCard
           _loadiine
+    - name: Install 7z
+      run: brew install p7zip
     - name: Zip Files
-      uses: montudor/action-zip@v1
-      with:
-        args: zip -qq -r Build.zip _sdCard _loadiine
-    - name: Make a release
-      uses: "marvinpinto/action-automatic-releases@latest"
-      with:
-        repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        automatic_release_tag: "auto"
-        prerelease: true
-        title: "Auto Build"
-        files: |
-          Build.zip
+      run: |
+        cd _sdCard
+        7z a ../Build.zip *.* -r
+        cd ../
+        cd _loadiine
+        7z a ../Build.zip *.* -r
+        cd ../
+    - name: Upload Build.zip
+      uses: actions/upload-artifact@v2
+      with: 
+        name: Zip
+        path: Build.zip
+          
+  build_dynamic:
+    needs: build_WUT
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitppc:latest
+    
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          ref: dynamic_libs
+      - run: make -j4
+      - name: Get cache
+      - uses: actions/download-artifact@v2
+        with:
+          name: Zip
+      - name: Install 7z
+        run: brew install p7zip
+      - name: Update Build.zip
+        run: 7z a Build.zip WiiUFtpServer.elf
+      - name: Make a release
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "auto"
+          prerelease: true
+          title: "Auto Build"
+          files: |
+            Build.zip
+      
