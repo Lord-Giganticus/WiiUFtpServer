@@ -28,7 +28,7 @@ jobs:
     - name: Install 7z
       run: |
           apt-get update
-          apt-get install p7zip-full
+          apt-get install -y --no-install-recommends p7zip-full
     - name: Zip Files
       run: |
         cd _sdCard
@@ -60,7 +60,7 @@ jobs:
       - name: Install 7z
         run: |
           apt-get update
-          apt-get install p7zip-full
+          apt-get install -y --no-install-recommends p7zip-full
       - name: Update Build.zip
         run: 7z a Build.zip WiiUFtpServer.elf
       - name: Make a release
