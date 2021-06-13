@@ -52,7 +52,7 @@ jobs:
           ref: dynamic_libs
       - run: make -j4
       - name: Get cache
-      - uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v2
         with:
           name: Zip
       - name: Install 7z
