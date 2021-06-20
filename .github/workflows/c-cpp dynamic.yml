@@ -1,0 +1,30 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ dynamic_libs ]
+  pull_request:
+    branches: [ dynamic_libs ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitppc:latest
+    
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          ref: dynamic_libs
+      - run: make -j4
+      - name: Install 7z
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends p7zip-full
+      - name: Update Build.zip
+        run: 7z a Build.zip WiiUFtpServer.elf
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2.2.4
+        with:
+          name: Build
+          path: Build.zip
