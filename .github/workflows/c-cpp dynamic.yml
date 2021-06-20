@@ -1,10 +1,11 @@
-name: C/C++ CI
+name: C/C++ CI on dynamic_libs
 
 on:
   push:
     branches: [ dynamic_libs ]
   pull_request:
     branches: [ dynamic_libs ]
+  workflow_dispatch:
 
 jobs:
   build:
