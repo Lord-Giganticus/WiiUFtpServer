@@ -42,34 +42,3 @@ jobs:
       with: 
         name: Zip
         path: Build.zip
-          
-  build_dynamic:
-    needs: build_WUT
-    runs-on: ubuntu-latest
-    container: devkitpro/devkitppc:latest
-    
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          ref: dynamic_libs
-      - run: make -j4
-      - name: Get cache
-        uses: actions/download-artifact@v2
-        with:
-          name: Zip
-      - name: Install 7z
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends p7zip-full
-      - name: Update Build.zip
-        run: 7z a Build.zip WiiUFtpServer.elf
-      - name: Make a release
-        uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "auto"
-          prerelease: true
-          title: "Auto Build"
-          files: |
-            Build.zip
-      
