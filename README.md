@@ -1,22 +1,23 @@
 # WiiUFtpServer
 A new FTP server for the Wii-U that fix files injection and display files timestamps correctly.
 
-I used libWUT for the channel version but kept using dynamic_libs for the HBL version because of greater socket bandwith (i've created a gitHub branch for that)
-
 <p align="center">
   <img src="WiiUFtpServer.png">
 </p>
 
+It **fixes remaining files injection failures** when using ftp-everywhere : few games such as WWHD check the save files'rights and refuse to import them if permissions rights are not set using IOSUHAX_FSA_ChangeMode.
 
-It **fixes remaining files injection failures** when using ftp-everywhere.
+I used libWUT for the channel version but kept using dynamic_libs for the HBL version because of greater socket bandwith (i've created a gitHub branch for that)
 
-Few games such as WWHD check the save files'rights and refuse to import them if permissions rights are not set using IOSUHAX_FSA_ChangeMode.
+<p align="center">
+  <img src="bandwith.png">
+</p>
 
-I also **disable the power saving feature** when it runs.
 
 
 **NOTES :**
 
+- Use a maximum of 8 concurrents downloads per client.
 
 - The server does not implement the [MTDM](https://support.solarwinds.com/SuccessCenter/s/article/Enable-the-MDTM-command-to-preserve-the-original-time-stamp-of-uploaded-files?language=en_US) function (and so does not preserves files timestamps) but now displays the correct dates : 
 
