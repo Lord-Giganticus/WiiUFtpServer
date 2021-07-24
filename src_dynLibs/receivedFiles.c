@@ -5,11 +5,11 @@
 #include <malloc.h>
 #include <string.h>
 #include <unistd.h>
-#include <coreinit/thread.h>
+#include <dynamic_libs/os_functions.h>
 
-#include "receivedFiles.h"
 #include "ftp.h"
-#include "iosuhax.h"
+#include "receivedFiles.h"
+#include "iosuhax/iosuhax.h"
 
 // iosuhax fd
 static int fsaFd = -1;
@@ -23,7 +23,7 @@ static int nbFiles = 0;
 
 // thread safety functions
 static void lockThread() {
-    while (_threadLocked) OSSleepTicks(OSMillisecondsToTicks(10));
+    while (_threadLocked) usleep(10);
     _threadLocked = 1;
 }    
 static void unlockThread() {
@@ -78,14 +78,14 @@ int ChmodFile(int fd) {
                 free(files[i]->path);
                 // free ENTRY
                 free(files[i]);
-            	if (nbFiles > 0) nbFiles=nbFiles-1;
+                if (nbFiles > 0) nbFiles=nbFiles-1;
                 else free(files);
                 
                 unlockThread();
                 return 0;
             }
         }
-		unlockThread();
+        unlockThread();
     }
     return -1;
 }    

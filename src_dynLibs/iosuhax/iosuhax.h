@@ -30,24 +30,9 @@
 extern "C" {
 #endif
 
-#ifdef __WUT__
-/* Modern case: wut headers */
-#include <coreinit/mutex.h>
-#include <coreinit/ios.h>
-#include <coreinit/filesystem.h>
-
-/* Hide behind IOSUHAX types */
-typedef FSStat IOSUHAX_FSA_Stat;
-#define IOSUHAX_FSA_STAT_IS_WUT
-
-typedef FSDirectoryEntry IOSUHAX_FSA_DirectoryEntry;
-#define IOSUHAX_FSA_DIRECTORYENTRY_IS_WUT
-
-#define OS_MUTEX_SIZE sizeof(OSMutex)
-#else
 /* Legacy case: dynamic_libs */
 #include <dynamic_libs/os_functions.h>
-#include <dynamic_libs/fs_defs.h>
+#include <common/fs_defs.h>
 
 /* Hide behind IOSUHAX types. One day these may be changed to mirror the wut
    types more closely. */
@@ -56,8 +41,6 @@ typedef FSStat IOSUHAX_FSA_Stat;
 
 typedef FSDirEntry IOSUHAX_FSA_DirectoryEntry;
 #define IOSUHAX_FSA_DIRECTORYENTRY_IS_DYNAMICLIBS
-
-#endif
 
 #define FSA_MOUNTFLAGS_BINDMOUNT (1 << 0)
 #define FSA_MOUNTFLAGS_GLOBAL (1 << 1)

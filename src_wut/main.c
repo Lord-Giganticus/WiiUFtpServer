@@ -30,7 +30,7 @@
 #include "iosuhax_cfw.h"
 #include "receivedFiles.h"
 
-#define FTP_PORT	21
+#define FTP_PORT    21
 /****************************************************************************/
 // PARAMETERS
 /****************************************************************************/
@@ -40,16 +40,26 @@ static int fsaFd = -1;
 // mcp_hook_fd
 static int mcp_hook_fd = -1;
 
-// gamepad inputs (needed for channel, WHBProc HOME_BUTTON event is not enought)
-VPADStatus vpadStatus;
-VPADReadError vpadError;
-KPADStatus kpadStatus;
-VPADReadError kpadError;
-bool pad_fatal = false;
 
 static OSDynLoad_Module coreinitHandle = NULL;
 static int32_t (*OSShutdown)(int32_t status);
 
+// lock to make thread safe the display method
+static bool displayLock=false;
+// method to output to gamePad and TV (thread safe)
+void logLine(const char *line)
+{
+    while (displayLock) OSSleepTicks(OSMillisecondsToTicks(100));
+    
+    // set the lock
+    displayLock=true;
+    
+    WHBLogPrintf("%s", line);
+    WHBLogConsoleDraw();
+    
+    // unset the lock
+    displayLock=false;
+}    
 /****************************************************************************/
 // LOCAL FUNCTIONS
 /****************************************************************************/
@@ -100,7 +110,7 @@ int main()
     // returned code :
     // =0 : OK
     // <0 : ERRORS 
-    int returnCode = 0;
+    int returnCode = EXIT_SUCCESS;
         
     // Console init
     WHBProcInit();
@@ -121,9 +131,10 @@ int main()
     WHBLogPrintf(" -=============================-\n");
     WHBLogPrintf("|    %s     |\n", VERSION_STRING);
     WHBLogPrintf(" -=============================-\n");
-    WHBLogPrintf("[Laf111:2021-06]");
+    WHBLogPrintf("[Laf111/2021-07/WUT]");
     WHBLogPrintf(" ");
-
+    WHBLogConsoleDraw();
+    
     // Get OS time and save it in ftp static variable 
     OSCalendarTime osDateTime;
     struct tm tmTime;
@@ -131,10 +142,10 @@ int main()
 
     // tm_mon is in [0,30]
     int mounth=osDateTime.tm_mon+1;
-    WHBLogPrintf("Wii-U OS date : %02d/%02d/%04d %02d:%02d:%02d",
-                      osDateTime.tm_mday, mounth, osDateTime.tm_year,
-                      osDateTime.tm_hour, osDateTime.tm_min, osDateTime.tm_sec);
-    WHBLogConsoleDraw();
+    WHBLogPrintf("Wii-U date (GMT) : %02d/%02d/%04d %02d:%02d:%02d",
+            osDateTime.tm_mday, mounth, osDateTime.tm_year,
+            osDateTime.tm_hour, osDateTime.tm_min, osDateTime.tm_sec);
+    
     
     tmTime.tm_sec   =   osDateTime.tm_sec;
     tmTime.tm_min   =   osDateTime.tm_min;
@@ -148,8 +159,14 @@ int main()
     
     // save GMT OS Time in ftp.c
     setOsTime(&tmTime);
+    WHBLogPrintf(" ");
+    WHBLogConsoleDraw();
+    OSSleepTicks(OSMillisecondsToTicks(2000));
 
-     // Check if a CFW is active
+    /*--------------------------------------------------------------------------*/
+    /* IOSUHAX operations and mounting devices                                  */
+    /*--------------------------------------------------------------------------*/
+    // Check if a CFW is active
     IOSUHAX_CFW_Family cfw = IOSUHAX_CFW_GetFamily();
     if (cfw == 0) {
         WHBLogPrintf("! ERROR : No running CFW detected");
@@ -157,13 +174,9 @@ int main()
         goto exit;
     }
     
-    /*--------------------------------------------------------------------------*/
-    /* IOSUHAX operations and mounting devices                                  */
-    /*--------------------------------------------------------------------------*/
     int res = IOSUHAX_Open(NULL);
-    if (res < 0) {
+    if(res < 0)
         res = MCPHookOpen();
-    }
     if (res < 0) {
         WHBLogPrintf("! ERROR : IOSUHAX_Open failed.");
         returnCode = -11;
@@ -180,44 +193,52 @@ int main()
     }
     
     setFsaFd(fsaFd);
-    WHBLogPrintf(" ");
 
-	int nbDrives=MountVirtualDevices(fsaFd);    
+    int nbDrives=MountVirtualDevices(fsaFd);    
     if (nbDrives == 0) {
         WHBLogPrintf("! ERROR : No virtual devices mounted !");
         returnCode = -20;
         goto exit;
     }
+    WHBLogPrintf(" ");
     
     /*--------------------------------------------------------------------------*/
     /* Starting Network                                                         */
     /*--------------------------------------------------------------------------*/
-	WHBInitializeSocketLibrary();
-	initialise_network();
+    WHBInitializeSocketLibrary();
+    initialise_network();
 
     /*--------------------------------------------------------------------------*/
     /* Create FTP server                                                        */
     /*--------------------------------------------------------------------------*/
     int serverSocket = create_server(FTP_PORT);
+    if (serverSocket < 0) WHBLogPrintf("! ERROR : when creating server");
     int network_down = 0;
+    WHBLogConsoleDraw();
 
     /*--------------------------------------------------------------------------*/
     /* FTP loop                                                                 */
     /*--------------------------------------------------------------------------*/    
 
+    // gamepad inputs (needed for channel, WHBProc HOME_BUTTON event is not enought)
+    VPADStatus vpadStatus;
+    VPADReadError vpadError = -1;
+
+    KPADStatus kpadStatus;
+    VPADReadError kpadError = -1;
     bool exitApplication = false;
-    while (WHBProcIsRunning() && serverSocket >= 0 && !network_down)
+    while (WHBProcIsRunning() && serverSocket >= 0 && !network_down && !exitApplication)
     {
         network_down = process_ftp_events();
         if(network_down)
             break;
-        OSSleepTicks(OSMillisecondsToTicks(100));
 
+        OSSleepTicks(OSMillisecondsToTicks(100));
         WHBLogConsoleDraw();
-        
+
         VPADRead(0, &vpadStatus, 1, &vpadError);
         if ((vpadStatus.trigger | vpadStatus.hold) & VPAD_BUTTON_HOME) exitApplication = true;
-        
+
         for (int i = 0; i < 4; i++)
         {
             uint32_t controllerType;
@@ -225,7 +246,7 @@ int main()
             if (WPADProbe(i, &controllerType) != 0)
                 continue;
 
-            KPADRead(i, &kpadStatus, kpadError);
+           KPADRead(i, &kpadStatus, kpadError);
             
             switch (kpadError) {
                 case VPAD_READ_SUCCESS: {
@@ -246,7 +267,6 @@ int main()
                 }
             }
 
-            if (exitApplication) break;         
 
             switch (controllerType)
             {
@@ -263,10 +283,11 @@ int main()
                         exitApplication = true;
                     break;
             }
-            if (exitApplication) break;            
-        }        
-        
-        if (exitApplication) break;            
+
+            
+            if (exitApplication) break;
+
+        }
     }
 
     WHBLogConsoleDraw();
@@ -278,12 +299,16 @@ int main()
     WHBLogPrintf(" ");   
     WHBLogPrintf("Stopping server...");   
     WHBLogPrintf(" "); 
-    WHBLogConsoleDraw();
-
+    WHBLogPrintf(" "); 
+    WHBLogConsoleDraw();  
+    
     cleanup_ftp();
+    
+    VPADShutdown();
     if (serverSocket >= 0) network_close(serverSocket);
-	finalize_network();
-	WHBDeinitializeSocketLibrary();
+    finalize_network();
+
+    WHBLogPrintf(" "); 
 
     UmountVirtualDevices();
     
@@ -300,12 +325,13 @@ exit:
         WHBLogPrintf("Shuting down the Wii-U...");
         
     } else {
-        WHBLogPrintf("Returning to HBL Menu...");               
+        WHBLogPrintf("Returning to HBL Menu...");
     }
-    WHBLogConsoleDraw();    
-    OSSleepTicks(OSMillisecondsToTicks(1000));
-        
-    WHBLogConsoleDraw();
+    WHBLogPrintf(" ");
+    WHBLogConsoleDraw();      
+    
+    OSSleepTicks(OSMillisecondsToTicks(2000));
+            
     WHBLogConsoleFree();
     WHBProcShutdown();    
 

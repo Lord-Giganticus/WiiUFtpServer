@@ -16,8 +16,6 @@
 extern "C"{
 #endif
 
-#define gettime()               OSGetTime()
-
 int32_t create_server(uint16_t port);
 bool process_ftp_events();
 void cleanup_ftp();

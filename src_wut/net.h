@@ -5,9 +5,6 @@
 #ifndef _NET_H_
 #define _NET_H_
 
-#include <whb/proc.h>
-#include <whb/log.h>
-#include <whb/log_console.h>
 #include <coreinit/thread.h>
 
 #ifdef __cplusplus
@@ -26,11 +23,16 @@ extern "C"{
 #ifndef MIN
     #define MIN(x, y) ((x) < (y) ? (x) : (y))
 #endif
+// tweak only this one for testing
+#define OPT_COEF 2
 
-#define MAX_NET_BUFFER_SIZE (128*1024)
-#define MIN_NET_BUFFER_SIZE 4*1024
-// Maximum of simultaneous connexions
-#define NB_SIMULTANEOUS_CONNECTIONS 32
+#define DEFAULT_NET_BUFFER_SIZE 64*1024
+#define MIN_NET_BUFFER_SIZE DEFAULT_NET_BUFFER_SIZE/16
+
+// Optimized buffer size
+#define MAX_NET_BUFFER_SIZE DEFAULT_NET_BUFFER_SIZE*OPT_COEF
+
+#define NB_SIMULTANEOUS_CONNECTIONS MAX_NET_BUFFER_SIZE/MIN_NET_BUFFER_SIZE
 
 void initialise_network();
 void finalize_network();
@@ -53,7 +55,6 @@ int32_t send_exact(int32_t s, char *buf, int32_t length);
 int32_t send_from_file(int32_t s, FILE *f);
 
 int32_t recv_to_file(int32_t s, FILE *f);
-
 
 #ifdef __cplusplus
 }

@@ -16,16 +16,16 @@ extern "C"{
 #include "iosuhax_devoptab.h"
 
 typedef struct {
-	char *name;
-	char *alias;
-	char *prefix;
-	bool inserted;
+    char *name;
+    char *alias;
+    char *prefix;
+    bool inserted;
 } VIRTUAL_PARTITION;
 
 extern VIRTUAL_PARTITION * VIRTUAL_PARTITIONS;
 extern uint8_t MAX_VIRTUAL_PARTITIONS;
 
-int	MountVirtualDevices();
+int    MountVirtualDevices();
 void UnmountVirtualPaths();
 void UmountVirtualDevices();
 

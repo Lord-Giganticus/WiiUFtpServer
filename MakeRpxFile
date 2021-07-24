@@ -1,7 +1,3 @@
-#-------------------------------------------------------------------------------
-.SUFFIXES:
-#-------------------------------------------------------------------------------
-
 ifeq ($(strip $(DEVKITPRO)),)
 $(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>/devkitpro")
 endif
@@ -25,12 +21,12 @@ include $(WUT_ROOT)/share/wut_rules
 #-------------------------------------------------------------------------------
 TARGET		:=	WiiUFtpServer
 BUILD		:=	build
-SOURCES		:=	src \
-                src/iosuhax
+SOURCES		:=	src_wut \
+                src_wut/iosuhax
                 
 DATA		:=	data
-INCLUDES	:=	src \
-                src/iosuhax
+INCLUDES	:=	src_wut \
+                src_wut/iosuhax
                 
 #-------------------------------------------------------------------------------
 # options for code generation

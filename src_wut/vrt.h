@@ -17,9 +17,9 @@ extern "C"{
 
 typedef struct
 {
-	DIR *dir;
-	char *path;
-	uint8_t virt_root;
+    DIR *dir;
+    char *path;
+    uint8_t virt_root;
 } DIR_P;
 
 char *to_real_path(char *virtual_cwd, char *virtual_path);
