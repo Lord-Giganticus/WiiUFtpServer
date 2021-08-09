@@ -21,10 +21,18 @@
 #include "net.h"
 
 #define FTP_PORT                21
+
 #define MAX_CONSOLE_LINES_TV    27
 #define MAX_CONSOLE_LINES_DRC   18
 
+/****************************************************************************/
+// PARAMETERS
+/****************************************************************************/
+// iosuhax file descriptor
+
 static int fsaFd = -1;
+
+// mcp_hook_fd
 static int mcp_hook_fd = -1;
 
 static char * consoleArrayTv[MAX_CONSOLE_LINES_TV];
@@ -94,7 +102,11 @@ void display(const char *format, ...)
     // unset the lock
     displayLock=false;    
 }
+/****************************************************************************/
+// LOCAL FUNCTIONS
+/****************************************************************************/
 
+//--------------------------------------------------------------------------
 //just to be able to call async
 void someFunc(s32 err, void *arg)
 {
@@ -143,7 +155,7 @@ int __entry_menu(int argc, char **argv)
     memoryInitialize();
     InitVPadFunctionPointers();
     InitPadScoreFunctionPointers();    
-    VPADInit();
+
     WPADInit();
 
     // Init screen and screen buffers
@@ -190,6 +202,7 @@ int __entry_menu(int argc, char **argv)
     if (thread != NULL) {
         // set the name 
         OSSetThreadName(thread, "WiiUFtpServer thread on CPU1");
+
         // set a priority to 0
         OSSetThreadPriority(thread, 0);
     }
@@ -197,9 +210,9 @@ int __entry_menu(int argc, char **argv)
     display(" -=============================-\n");
     display("|    %s     |\n", VERSION_STRING);
     display(" -=============================-\n");
-    display("[Laf111/2021-07/dynamic_libs]");
+    display("[Laf111/2021-08/dynamic_libs]");
     display(" ");
- 
+    
     // Get OS time and save it in ftp static variable 
     OSCalendarTime osDateTime;
     struct tm tmTime;
@@ -224,7 +237,6 @@ int __entry_menu(int argc, char **argv)
     // save GMT OS Time in ftp.c
     setOsTime(&tmTime);
     display(" ");
-    usleep(2000);
     
     /*--------------------------------------------------------------------------*/
     /* IOSUHAX operations and mounting devices                                  */
@@ -263,7 +275,16 @@ int __entry_menu(int argc, char **argv)
         goto exit;
     }
     display(" ");
+    sleep(2);
 
+	
+    display(" ");
+    display("FTP client tips :");    
+	display("- ONLY one simultaneous transfert on UPLOAD (safer)");
+	display("- 8 slots maximum for DOWNLOAD (2 clients => 4 per clients)");
+    display(" ");
+		
+    
     /*--------------------------------------------------------------------------*/
     /* Create FTP server                                                        */
     /*--------------------------------------------------------------------------*/
@@ -291,8 +312,6 @@ int __entry_menu(int argc, char **argv)
         network_down = process_ftp_events();
         if(network_down)
             break;
-
-        usleep(1000);
 
         VPADRead(0, &vpad, 1, &vpadError);
 
@@ -327,13 +346,13 @@ int __entry_menu(int argc, char **argv)
         if (exitApplication) break;            
         }
     }
+        
     /*--------------------------------------------------------------------------*/
     /* Cleanup and exit                                                         */
     /*--------------------------------------------------------------------------*/
     display("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
     display(" ");   
     display("Stopping server...");   
-    display(" "); 
     display(" "); 
     
     cleanup_ftp();

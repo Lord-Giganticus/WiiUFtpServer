@@ -36,8 +36,8 @@ extern "C"{
     #define MIN(x, y) ((x) < (y) ? (x) : (y))
 #endif
 
-// Maximum of simultaneous connexions 16*OPT_COEF
-#define NB_SIMULTANEOUS_CONNECTIONS MAX_NET_BUFFER_SIZE/MIN_NET_BUFFER_SIZE
+// Maximum of simultaneous connexions 
+#define NB_SIMULTANEOUS_CONNECTIONS (2*MAX_NET_BUFFER_SIZE)/MIN_NET_BUFFER_SIZE
 
 void initialise_network();
 void finalize_network();
@@ -47,7 +47,7 @@ s32 network_bind(s32 s,struct sockaddr *name,s32 namelen);
 s32 network_listen(s32 s,u32 backlog);
 s32 network_accept(s32 s,struct sockaddr *addr,s32 *addrlen);
 s32 network_connect(s32 s,struct sockaddr *,s32);
-s32 network_read(s32 s,void *mem,s32 len);
+s32 network_read(s32 s,char *mem,s32 len);
 s32 network_close(s32 s);
 u32 network_gethostip();
 
