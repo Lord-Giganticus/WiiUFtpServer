@@ -21,12 +21,14 @@ include $(WUT_ROOT)/share/wut_rules
 #-------------------------------------------------------------------------------
 TARGET		:=	WiiUFtpServer
 BUILD		:=	build
-SOURCES		:=	src_wut \
-                src_wut/iosuhax
+SOURCES		:=	src \
+                src/dynamic_libs \
+                src/iosuhax
                 
 DATA		:=	data
-INCLUDES	:=	src_wut \
-                src_wut/iosuhax
+INCLUDES	:=	src \
+                src/dynamic_libs \
+                src/iosuhax
                 
 #-------------------------------------------------------------------------------
 # options for code generation

@@ -28,9 +28,10 @@ extern "C"{
 #define MIN_NET_BUFFER_SIZE DEFAULT_NET_BUFFER_SIZE/16
 #define MAX_NET_BUFFER_SIZE DEFAULT_NET_BUFFER_SIZE*2
 
-#define NB_SIMULTANEOUS_CONNECTIONS (2*MAX_NET_BUFFER_SIZE)/MIN_NET_BUFFER_SIZE
+// Unlimit the number of connections (hard fixed to 1 for up/download)
+#define NB_SIMULTANEOUS_CONNECTIONS 999999
 
-void initialise_network();
+void initialize_network();
 void finalize_network();
 
 int32_t network_socket(uint32_t domain,uint32_t type,uint32_t protocol);

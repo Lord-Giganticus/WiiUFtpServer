@@ -10,7 +10,7 @@
 
 #include "virtualpath.h"
 
-extern void display(const char *format, ...);
+extern void logLine(const char *format, ...);
 
 // iosuhax fd
 static int fsaFd = -1;
@@ -32,11 +32,11 @@ VIRTUAL_PARTITION * VIRTUAL_PARTITIONS = NULL;
 
 static void AddVirtualPath(const char *name, const char *alias, const char *prefix)
 {
-    if(!VIRTUAL_PARTITIONS)
+    if (!VIRTUAL_PARTITIONS)
         VIRTUAL_PARTITIONS = (VIRTUAL_PARTITION *) malloc(sizeof(VIRTUAL_PARTITION));
 
     VIRTUAL_PARTITION * tmp = realloc(VIRTUAL_PARTITIONS, sizeof(VIRTUAL_PARTITION)*(MAX_VIRTUAL_PARTITIONS+1));
-    if(!tmp)
+    if (!tmp)
     {
         free(VIRTUAL_PARTITIONS);
         MAX_VIRTUAL_PARTITIONS = 0;
@@ -55,7 +55,7 @@ static void AddVirtualPath(const char *name, const char *alias, const char *pref
 
 static void VirtualMountDevice(const char * path)
 {
-    if(!path)
+    if (!path)
         return;
 
     int i = 0;
@@ -68,10 +68,10 @@ static void VirtualMountDevice(const char * path)
 
     do
     {
-        if(path[i] == ':')
+        if (path[i] == ':')
             namestop = true;
 
-        if(!namestop)
+        if (!namestop)
         {
             name[i] = path[i];
             name[i+1] = '\0';
@@ -83,7 +83,7 @@ static void VirtualMountDevice(const char * path)
         prefix[i+1] = '\0';
         i++;
     }
-    while(path[i-1] != '/');
+    while (path[i-1] != '/');
     AddVirtualPath(name, alias, prefix);
 }
 
@@ -92,15 +92,15 @@ void UnmountVirtualPaths()
     uint32_t i = 0;
     for(i = 0; i < MAX_VIRTUAL_PARTITIONS; i++)
     {
-        if(VIRTUAL_PARTITIONS[i].name)
+        if (VIRTUAL_PARTITIONS[i].name)
             free(VIRTUAL_PARTITIONS[i].name);
-        if(VIRTUAL_PARTITIONS[i].alias)
+        if (VIRTUAL_PARTITIONS[i].alias)
             free(VIRTUAL_PARTITIONS[i].alias);
-        if(VIRTUAL_PARTITIONS[i].prefix)
+        if (VIRTUAL_PARTITIONS[i].prefix)
             free(VIRTUAL_PARTITIONS[i].prefix);
     }
 
-    if(VIRTUAL_PARTITIONS)
+    if (VIRTUAL_PARTITIONS)
         free(VIRTUAL_PARTITIONS);
     VIRTUAL_PARTITIONS = NULL;
     MAX_VIRTUAL_PARTITIONS = 0;
@@ -125,70 +125,73 @@ void ResetVirtualPaths()
     }
 }       
 //--------------------------------------------------------------------------
-int    MountVirtualDevices(int hfd) {
+int    MountVirtualDevices(int hfd, bool mountMlc) {
     
     fsaFd = hfd;
     IOSUHAX_FSA_Mount(fsaFd, "/dev/sdcard01", "/vol/storage_sdcard", 2, (void*)0, 0);
     
-    if (mount_fs("storage_sdcard", fsaFd, NULL, "/vol/storage_sdcard") == 0) {
-        WHBLogPrintf("mounting storage_sdcard...");
-        WHBLogConsoleDraw();
+    if (mount_fs("storage_sdcard", fsaFd, NULL, "/vol/storage_sdcard") >=0) {
+        logLine("mounting storage_sdcard...");
+        
         storage_sdcard=1;
         VirtualMountDevice("storage_sdcard:/");
         nbDevices++;
     }
-    if (mount_fs("storage_slccmpt", fsaFd, "/dev/slccmpt01", "/vol/storage_slccmpt01") == 0) {
-        WHBLogPrintf("mounting storage_slccmpt...");
-        WHBLogConsoleDraw();
-        storage_slccmpt=1;
-        VirtualMountDevice("storage_slccmpt:/");
-        nbDevices++;
+    if (mount_fs("storage_usb", fsaFd, NULL, "/vol/storage_usb01") >=0) {
+    logLine("mounting storage_usb...");
+    
+    storage_usb=1;
+    VirtualMountDevice("storage_usb:/");
+    nbDevices++;
     }
-    if (mount_fs("storage_mlc", fsaFd, NULL, "/vol/storage_mlc01") == 0) {
-        WHBLogPrintf("mounting storage_mlc...");
-        WHBLogConsoleDraw();
-        storage_mlc=1;
-        VirtualMountDevice("storage_mlc:/");
-        nbDevices++;
+    
+    if (mountMlc) {
+        if (mount_fs("storage_slccmpt", fsaFd, "/dev/slccmpt01", "/vol/storage_slccmpt01") >=0) {
+            logLine("mounting storage_slccmpt...");
+            
+            storage_slccmpt=1;
+            VirtualMountDevice("storage_slccmpt:/");
+            nbDevices++;
+        }
+        if (mount_fs("storage_mlc", fsaFd, NULL, "/vol/storage_mlc01") >= 0) {
+            logLine("mounting storage_mlc...");
+            
+            storage_mlc=1;
+            VirtualMountDevice("storage_mlc:/");
+            nbDevices++;
+        }
+        if (mount_fs("storage_slc", fsaFd, NULL, "/vol/system") >= 0) {
+            logLine("mounting storage_slc...");
+            
+            storage_slc=1;
+            VirtualMountDevice("storage_slc:/");
+            nbDevices++;
+        }
     }
-    if (mount_fs("storage_usb", fsaFd, NULL, "/vol/storage_usb01") == 0) {
-        WHBLogPrintf("mounting storage_usb...");
-        WHBLogConsoleDraw();
-        storage_usb=1;
-        VirtualMountDevice("storage_usb:/");
-        nbDevices++;
-    }
-    if (mount_fs("storage_slc", fsaFd, NULL, "/vol/system") == 0) {
-        WHBLogPrintf("mounting storage_slc...");
-        WHBLogConsoleDraw();
-        storage_slc=1;
-        VirtualMountDevice("storage_slc:/");
-        nbDevices++;
-    }    
-    if (mount_fs("storage_odd_tickets", fsaFd, "/dev/odd01", "/vol/storage_odd_tickets") == 0) {
-        WHBLogPrintf("mounting storage_odd_tickets...");
-        WHBLogConsoleDraw();
+    if (mount_fs("storage_odd_tickets", fsaFd, "/dev/odd01", "/vol/storage_odd_tickets") >= 0) {
+        logLine("mounting storage_odd_tickets...");
+        
         storage_odd_tickets=1;
         VirtualMountDevice("storage_odd_tickets:/");
         nbDevices++;
     }
-    if (mount_fs("storage_odd_updates", fsaFd, "/dev/odd02", "/vol/storage_odd_updates") == 0) {
-        WHBLogPrintf("mounting storage_odd_updates...");
-        WHBLogConsoleDraw();
+    if (mount_fs("storage_odd_updates", fsaFd, "/dev/odd02", "/vol/storage_odd_updates") >=0) {
+        logLine("mounting storage_odd_updates...");
+        
         storage_odd_updates=1;
         VirtualMountDevice("storage_odd_updates:/");
         nbDevices++;
     }
-    if (mount_fs("storage_odd_content", fsaFd, "/dev/odd03", "/vol/storage_odd_content") == 0) {
-        WHBLogPrintf("mounting storage_odd_content...");
-        WHBLogConsoleDraw();
+    if (mount_fs("storage_odd_content", fsaFd, "/dev/odd03", "/vol/storage_odd_content") >= 0) {
+        logLine("mounting storage_odd_content...");
+        
         storage_odd_content=1;
         VirtualMountDevice("storage_odd_content:/");
         nbDevices++;
     }
-    if (mount_fs("storage_odd_content2", fsaFd, "/dev/odd04", "/vol/storage_odd_content2") == 0) {
-        WHBLogPrintf("mounting storage_odd_content2...");
-        WHBLogConsoleDraw();
+    if (mount_fs("storage_odd_content2", fsaFd, "/dev/odd04", "/vol/storage_odd_content2") >= 0) {
+        logLine("mounting storage_odd_content2...");
+        
         storage_odd_content2=1; 
         VirtualMountDevice("storage_odd_content2:/");
         nbDevices++;

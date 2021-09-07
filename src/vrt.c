@@ -139,7 +139,7 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
 
 static int checkdir(char *path) {
     DIR *dir = opendir(path);
-    if(dir)
+    if (dir)
     {
         closedir(dir);
         return 0;
@@ -289,7 +289,7 @@ DIR_P *vrt_opendir(char *cwd, char *path)
 
     if (*iter->path == 0) {
         iter->dir = malloc(sizeof(DIR));
-        if(!iter->dir) {
+        if (!iter->dir) {
             // root path is not allocated
             free(iter);
             return NULL;
@@ -300,7 +300,7 @@ DIR_P *vrt_opendir(char *cwd, char *path)
     }
 
     iter->dir = with_virtual_path(cwd, opendir, path, 0, NULL);
-    if(!iter->dir)
+    if (!iter->dir)
     {
         free(iter->path);
         free(iter);
@@ -314,7 +314,7 @@ DIR_P *vrt_opendir(char *cwd, char *path)
     Yields virtual aliases when pDir->virt_root
  */
 struct dirent *vrt_readdir(DIR_P *pDir) {
-    if(!pDir || !pDir->dir) return NULL;
+    if (!pDir || !pDir->dir) return NULL;
 
     DIR *iter = pDir->dir;
     if (pDir->virt_root) {
@@ -333,9 +333,9 @@ struct dirent *vrt_readdir(DIR_P *pDir) {
 }
 
 int vrt_closedir(DIR_P *iter) {
-    if(!iter) return -1;
+    if (!iter) return -1;
 
-    if(iter->dir)
+    if (iter->dir)
     {
         if (iter->virt_root)
             free(iter->dir);
@@ -344,7 +344,7 @@ int vrt_closedir(DIR_P *iter) {
     }
 
     // root path is not allocated
-    if(iter->path && *iter->path != 0)
+    if (iter->path && *iter->path != 0)
         free(iter->path);
 
     free(iter);

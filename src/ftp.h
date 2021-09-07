@@ -16,6 +16,7 @@
 extern "C"{
 #endif
 
+void setVerboseMode(bool flag);
 int32_t create_server(uint16_t port);
 bool process_ftp_events();
 void cleanup_ftp();

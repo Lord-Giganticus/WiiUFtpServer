@@ -1,12 +1,6 @@
-/****************************************************************************
-  * WiiUFtpServer
-  * 2021/04/05:V1.0.0:Laf111: import ftp-everywhere code
-  * 2021/04/25:V1.1.1:Laf111: try 1980 epoch for timestamp
-  * 2021/04/26:V1.2.0:Laf111: change the 421 msg 
-  * 2021/04/30:V2.0.0:Laf111: revert to timeOs for timestamp
-  * 2021/05/06:V2.1.0:Laf111: IOSUHAX_FSA_ChangeMode on folder created remotely
-  * 2021/05/13:V3.0.0:Laf111: fix timestamps on files and folders
- ***************************************************************************/
+/**************************************************************************
+* WiiUFtpServer (fork of FTP everywhere by Laf111@2021)                   *
+***************************************************************************/
 #include <malloc.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,12 +19,14 @@
 
 #define UNUSED    __attribute__((unused))
 
-#define FTP_MSG_BUFFER_SIZE MIN_NET_BUFFER_SIZE/4
+// IPV6 header is 60 bytes long
+#define FTP_MSG_BUFFER_SIZE MIN_NET_BUFFER_SIZE-60
 
 #define FTP_STACK_SIZE 0x2000
 
 extern void logLine(const char *line);
 
+static bool verboseMode=false;
 static const uint16_t SRC_PORT = 20;
 static const int32_t EQUIT = 696969;
 static const char *CRLF = "\r\n";
@@ -38,6 +34,7 @@ static const uint32_t CRLF_LENGTH = 2;
 
 static uint32_t nbConnections = 0;
 static char clientIp[15]="";
+// passive_port : 1024 - 65535
 static uint16_t passive_port = 1024;
 static char *password = NULL;
 
@@ -51,7 +48,7 @@ static int fsaFd = -1;
 
 typedef int32_t (*data_connection_callback)(int32_t data_socket, void *arg);
 
-struct client_struct {
+struct connection_struct {
     int32_t socket;
     char representation_type;
     int32_t passive_socket;
@@ -70,12 +67,13 @@ struct client_struct {
     uint64_t data_connection_timer;
 };
 
-typedef struct client_struct client_t;
+typedef struct connection_struct connection_t;
 
-static client_t *clients[NB_SIMULTANEOUS_CONNECTIONS] = { NULL };
+static connection_t *connections[NB_SIMULTANEOUS_CONNECTIONS] = { NULL };
 static int listener=-1;     // listening socket descriptor
 
-// sockets dedicated threads
+
+// FTP thread on CPU2
 static OSThread ftpThread;
 static uint8_t *ftpThreadStack;
 
@@ -93,6 +91,11 @@ static int ftpThreadMain(int argc, const char **argv)
     setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
     
     return socket;
+}
+
+// function to toggle verbose mode
+void setVerboseMode(bool flag) {
+    verboseMode=flag;
 }
 
 int32_t create_server(uint16_t port) {
@@ -137,10 +140,13 @@ int32_t create_server(uint16_t port) {
     }
 
     uint32_t ip = network_gethostip();
-    WHBLogPrintf(" ");
-    WHBLogPrintf("Listening on %u.%u.%u.%u:%i", (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF, port);
-    WHBLogConsoleDraw();
     
+    WHBLogPrintf(" ");     
+    WHBLogPrintf("    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
+    WHBLogPrintf("    @   Server IP adress = %u.%u.%u.%u ,port = %i   @", (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF, port);
+    WHBLogPrintf("    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
+    WHBLogPrintf(" ");    
+    WHBLogConsoleDraw();
     return listener;
 }
 
@@ -222,11 +228,6 @@ static struct tm getDateEpoch(time_t ts1980) {
     if (ts1980 == 0) return (*timeOs);
     time=timeOs;
     
-/*
-    WHBLogPrintf("DEBUG : ts1980 = %" PRId64, ts1980);
-    WHBLogConsoleDraw();      
- */
-    
     // check ts1980 value (1980 epoch with micro seconds)
     // 01/01/2010 00:00:00 -> 946771200,  with us = 946771200000000
     // 01/01/2038 00:00:00 -> 1830384000, with us = 1830384000000000
@@ -243,7 +244,6 @@ static struct tm getDateEpoch(time_t ts1980) {
     return (*time);
     
 }    
-
 static void set_ftp_password(char *new_password) {
     if (password) free(password);
     if (new_password) {
@@ -264,16 +264,17 @@ static bool compare_ftp_password(char *password_attempt) {
 /*
     TODO: support multi-line reply
 */
-static int32_t write_reply(client_t *client, uint16_t code, char *msg) {
+static int32_t write_reply(connection_t *client, uint16_t code, char *msg) {
     uint32_t msglen = 4 + strlen(msg) + CRLF_LENGTH;
     char msgbuf[msglen + 1];
     if (msgbuf == NULL) return -ENOMEM;
     sprintf(msgbuf, "%u %s\r\n", code, msg);
-    WHBLogPrintf("> %s", msgbuf);
+    if (verboseMode) WHBLogPrintf("> %s", msgbuf);
+
     return send_exact(client->socket, msgbuf, msglen);
 }
 
-static void close_passive_socket(client_t *client) {
+static void close_passive_socket(connection_t *client) {
     if (client->passive_socket >= 0) {
         network_close_blocking(client->passive_socket);
         client->passive_socket = -1;
@@ -320,11 +321,11 @@ static uint32_t split(char *s, char sep, uint32_t maxsplit, char *result[]) {
     return num_results;
 }
 
-static int32_t ftp_USER(client_t *client, char *username UNUSED) {
+static int32_t ftp_USER(connection_t *client, char *username UNUSED) {
     return write_reply(client, 331, "User name okay, need password.");
 }
 
-static int32_t ftp_PASS(client_t *client, char *password_attempt) {
+static int32_t ftp_PASS(connection_t *client, char *password_attempt) {
     if (compare_ftp_password(password_attempt)) {
         client->authenticated = true;
         return write_reply(client, 230, "User logged in, proceed.");
@@ -333,7 +334,7 @@ static int32_t ftp_PASS(client_t *client, char *password_attempt) {
     }
 }
 
-static int32_t ftp_REIN(client_t *client, char *rest UNUSED) {
+static int32_t ftp_REIN(connection_t *client, char *rest UNUSED) {
     close_passive_socket(client);
     strcpy(client->cwd, "/");
     client->representation_type = 'A';
@@ -341,17 +342,17 @@ static int32_t ftp_REIN(client_t *client, char *rest UNUSED) {
     return write_reply(client, 220, "Service ready for new user.");
 }
 
-static int32_t ftp_QUIT(client_t *client, char *rest UNUSED) {
+static int32_t ftp_QUIT(connection_t *client, char *rest UNUSED) {
     // TODO: dont quit if xfer in progress
     int32_t result = write_reply(client, 221, "Service closing control connection.");
     return result < 0 ? result : -EQUIT;
 }
 
-static int32_t ftp_SYST(client_t *client, char *rest UNUSED) {
+static int32_t ftp_SYST(connection_t *client, char *rest UNUSED) {
     return write_reply(client, 215, "UNIX Type: L8 Version: WiiUFtpServer");
 }
 
-static int32_t ftp_TYPE(client_t *client, char *rest) {
+static int32_t ftp_TYPE(connection_t *client, char *rest) {
     char representation_type[FTP_MSG_BUFFER_SIZE] = "", param[FTP_MSG_BUFFER_SIZE] = "";
     char *args[] = { representation_type, param };
     uint32_t num_args = split(rest, ' ', 1, args);
@@ -368,7 +369,7 @@ static int32_t ftp_TYPE(client_t *client, char *rest) {
     return write_reply(client, 200, msg);
 }
 
-static int32_t ftp_MODE(client_t *client, char *rest) {
+static int32_t ftp_MODE(connection_t *client, char *rest) {
     if (!strcasecmp("S", rest)) {
         return write_reply(client, 200, "Mode S ok.");
     } else {
@@ -376,14 +377,14 @@ static int32_t ftp_MODE(client_t *client, char *rest) {
     }
 }
 
-static int32_t ftp_PWD(client_t *client, char *rest UNUSED) {
+static int32_t ftp_PWD(connection_t *client, char *rest UNUSED) {
     char msg[MAXPATHLEN + 24] = "";
     // TODO: escape double-quotes
     sprintf(msg, "\"%s\" is current directory.", client->cwd);
     return write_reply(client, 257, msg);
 }
 
-static int32_t ftp_CWD(client_t *client, char *path) {
+static int32_t ftp_CWD(connection_t *client, char *path) {
     int32_t result;
     if (!vrt_chdir(client->cwd, path)) {
         result = write_reply(client, 250, "CWD command successful.");
@@ -393,7 +394,7 @@ static int32_t ftp_CWD(client_t *client, char *path) {
     return result;
 }
 
-static int32_t ftp_CDUP(client_t *client, char *rest UNUSED) {
+static int32_t ftp_CDUP(connection_t *client, char *rest UNUSED) {
     int32_t result;
     if (!vrt_chdir(client->cwd, "..")) {
         result = write_reply(client, 250, "CDUP command successful.");
@@ -403,7 +404,7 @@ static int32_t ftp_CDUP(client_t *client, char *rest UNUSED) {
     return result;
 }
 
-static int32_t ftp_DELE(client_t *client, char *path) {
+static int32_t ftp_DELE(connection_t *client, char *path) {
     if (!vrt_unlink(client->cwd, path)) {
         return write_reply(client, 250, "File or directory removed.");
     } else {
@@ -411,7 +412,7 @@ static int32_t ftp_DELE(client_t *client, char *path) {
     }
 }
 
-static int32_t ftp_MKD(client_t *client, char *path) {
+static int32_t ftp_MKD(connection_t *client, char *path) {
     if (!*path) {
         return write_reply(client, 501, "Syntax error in parameters.");
     }
@@ -441,12 +442,12 @@ static int32_t ftp_MKD(client_t *client, char *path) {
     }
 }
 
-static int32_t ftp_RNFR(client_t *client, char *path) {
+static int32_t ftp_RNFR(connection_t *client, char *path) {
     strcpy(client->pending_rename, path);
     return write_reply(client, 350, "Ready for RNTO.");
 }
 
-static int32_t ftp_RNTO(client_t *client, char *path) {
+static int32_t ftp_RNTO(connection_t *client, char *path) {
     if (!*client->pending_rename) {
         return write_reply(client, 503, "RNFR required first.");
     }
@@ -460,7 +461,7 @@ static int32_t ftp_RNTO(client_t *client, char *path) {
     return result;
 }
 
-static int32_t ftp_SIZE(client_t *client, char *path) {
+static int32_t ftp_SIZE(connection_t *client, char *path) {
     struct stat st;
     if (!vrt_stat(client->cwd, path, &st)) {
         char size_buf[12] = "";
@@ -471,7 +472,7 @@ static int32_t ftp_SIZE(client_t *client, char *path) {
     }
 }
 
-static int32_t ftp_PASV(client_t *client, char *rest UNUSED) {
+static int32_t ftp_PASV(connection_t *client, char *rest UNUSED) {
     close_passive_socket(client);
     client->passive_socket = network_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (client->passive_socket < 0) {
@@ -481,7 +482,9 @@ static int32_t ftp_PASV(client_t *client, char *rest UNUSED) {
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
     bindAddress.sin_family = AF_INET;
-    bindAddress.sin_port = htons(passive_port++); // XXX: BUG: This will overflow eventually, with interesting results...
+    // reset passive_port to avoid overflow
+    if (passive_port == 65535) passive_port = 1024;
+    bindAddress.sin_port = htons(passive_port++);
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     int32_t result;
     if ((result = network_bind(client->passive_socket, (struct sockaddr *)&bindAddress, sizeof(bindAddress))) < 0) {
@@ -495,15 +498,16 @@ static int32_t ftp_PASV(client_t *client, char *rest UNUSED) {
     char reply[49+2] = "";
     uint16_t port = bindAddress.sin_port;
     uint32_t ip = network_gethostip();
-    struct in_addr addr;
-    addr.s_addr = ip;
-    WHBLogPrintf("  Listening for data connections at %s:%lu...", inet_ntoa(addr), port);
-
+	if (verboseMode) {
+	    struct in_addr addr;
+	    addr.s_addr = ip;
+	    WHBLogPrintf("Listening for data connections at %s : %lu...", inet_ntoa(addr), port);
+	}
     sprintf(reply, "Entering Passive Mode (%d,%d,%d,%d,%"PRIu16",%"PRIu16").", (ip >> 24) & 0xff, (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff, (port >> 8) & 0xff, port & 0xff);
     return write_reply(client, 227, reply);
 }
 
-static int32_t ftp_PORT(client_t *client, char *portspec) {
+static int32_t ftp_PORT(connection_t *client, char *portspec) {
     uint32_t h1, h2, h3, h4, p1, p2;
     if (sscanf(portspec, "%3d,%3d,%3d,%3d,%3d,%3d", &h1, &h2, &h3, &h4, &p1, &p2) < 6) {
         
@@ -519,17 +523,22 @@ static int32_t ftp_PORT(client_t *client, char *portspec) {
     uint16_t port = ((p1 &0xff) << 8) | (p2 & 0xff);
     client->address.sin_addr = sin_addr;
     client->address.sin_port = htons(port);
-    WHBLogPrintf("  Set client address to %s:%lu", addr_str, port);
+    if (verboseMode) WHBLogPrintf("Sending server address to %s on %lu port", addr_str, port);
     return write_reply(client, 200, "PORT command successful.");
 }
 
-typedef int32_t (*data_connection_handler)(client_t *client, data_connection_callback callback, void *arg);
+typedef int32_t (*data_connection_handler)(connection_t *client, data_connection_callback callback, void *arg);
 
-static int32_t prepare_data_connection_active(client_t *client, data_connection_callback callback UNUSED, void *arg UNUSED) {
+static int32_t prepare_data_connection_active(connection_t *client, data_connection_callback callback UNUSED, void *arg UNUSED) {
     
     int32_t data_socket = network_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (data_socket < 0) return data_socket;
     set_blocking(data_socket, false);
+    
+    int enable = 1;
+    if (!setsockopt(data_socket, SOL_SOCKET, SO_USERBUF, &enable, sizeof(enable))==0)
+        {logLine("! ERROR : Socket memory optimization failed !");}
+        
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
     bindAddress.sin_family = AF_INET;
@@ -542,30 +551,31 @@ static int32_t prepare_data_connection_active(client_t *client, data_connection_
     }
 
     client->data_socket = data_socket;
-    WHBLogPrintf("  Attempting to connect to client at %s:%u", inet_ntoa(client->address.sin_addr), client->address.sin_port);
+    if (verboseMode) WHBLogPrintf("Attempting to connect to client through %s : %u", inet_ntoa(client->address.sin_addr), client->address.sin_port);
     return 0;
 }
 
-static int32_t prepare_data_connection_passive(client_t *client, data_connection_callback callback UNUSED, void *arg UNUSED) {
+static int32_t prepare_data_connection_passive(connection_t *client, data_connection_callback callback UNUSED, void *arg UNUSED) {
     client->data_socket = client->passive_socket;
-    WHBLogPrintf("  Waiting for data connections...");
+    if (verboseMode) WHBLogPrintf("Waiting for data connections...");
     return 0;
 }
 
-static int32_t prepare_data_connection(client_t *client, void *callback, void *arg, void *cleanup) {
+static int32_t prepare_data_connection(connection_t *client, void *callback, void *arg, void *cleanup) {
     int32_t result = write_reply(client, 150, "Transferring data.");
     if (result >= 0) {
         data_connection_handler handler = prepare_data_connection_active;
         if (client->passive_socket >= 0) handler = prepare_data_connection_passive;
         result = handler(client, (data_connection_callback)callback, arg);
         if (result < 0) {
+            WHBLogPrintf("! WARNING : data transfer handler failed , socket error = %d", result);            
             result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
         } else {
             client->data_connection_connected = false;
             client->data_callback = callback;
             client->data_connection_callback_arg = arg;
             client->data_connection_cleanup = cleanup;
-            client->data_connection_timer = OSGetTick() + OSSecondsToTicks(10);
+            client->data_connection_timer = OSGetTick() + OSSecondsToTicks(1200);
         }
     }
     return result;
@@ -577,7 +587,7 @@ static int32_t send_nlst(int32_t data_socket, DIR_P *iter) {
     struct dirent *dirent = NULL;
     while ((dirent = vrt_readdir(iter)) != 0) {
         size_t end_index = strlen(dirent->d_name);
-        if(end_index + 2 >= MAXPATHLEN)
+        if (end_index + 2 >= MAXPATHLEN)
             continue;
         strcpy(filename, dirent->d_name);
         filename[end_index] = CRLF[0];
@@ -618,7 +628,7 @@ static int32_t send_list(int32_t data_socket, DIR_P *iter) {
     return result < 0 ? result : 0;
 }
 
-static int32_t ftp_NLST(client_t *client, char *path) {
+static int32_t ftp_NLST(connection_t *client, char *path) {
     if (!*path) {
         path = ".";
     }
@@ -633,7 +643,7 @@ static int32_t ftp_NLST(client_t *client, char *path) {
     return result;
 }
 
-static int32_t ftp_LIST(client_t *client, char *path) {
+static int32_t ftp_LIST(connection_t *client, char *path) {
     char rest[FTP_MSG_BUFFER_SIZE] = "";
     if (*path == '-') {
         // handle buggy clients that use "LIST -aL" or similar, at the expense of breaking paths that begin with '-'
@@ -646,7 +656,7 @@ static int32_t ftp_LIST(client_t *client, char *path) {
         path = ".";
     }
 
-      if(path && client->cwd) if(strcmp(path, ".") == 0 && strcmp(client->cwd, "/") == 0) ResetVirtualPaths(); 
+    if (path && client->cwd) if (strcmp(path, ".") == 0 && strcmp(client->cwd, "/") == 0) ResetVirtualPaths(); 
 
     DIR_P *dir = vrt_opendir(client->cwd, path);
     if (dir == NULL) {
@@ -658,7 +668,7 @@ static int32_t ftp_LIST(client_t *client, char *path) {
     return result;
 }
 
-static int32_t ftp_RETR(client_t *client, char *path) {
+static int32_t ftp_RETR(connection_t *client, char *path) {
     FILE *f = vrt_fopen(client->cwd, path, "rb");
     if (!f) {
         return write_reply(client, 550, strerror(errno));
@@ -678,7 +688,7 @@ static int32_t ftp_RETR(client_t *client, char *path) {
     return result;
 }
 
-static int32_t stor_or_append(client_t *client, char *path, FILE *f) {
+static int32_t stor_or_append(connection_t *client, char *path, FILE *f) {
     if (!f) {
         return write_reply(client, 550, strerror(errno));
     }
@@ -701,7 +711,7 @@ static int32_t stor_or_append(client_t *client, char *path, FILE *f) {
     return result;
 }
 
-static int32_t ftp_STOR(client_t *client, char *path) {
+static int32_t ftp_STOR(connection_t *client, char *path) {
     FILE *f = vrt_fopen(client->cwd, path, "wb");
     int fd;
     if (f) fd = fileno(f);
@@ -716,12 +726,12 @@ static int32_t ftp_STOR(client_t *client, char *path) {
     return stor_or_append(client, path, f);
 }
 
-static int32_t ftp_APPE(client_t *client, char *path) {
+static int32_t ftp_APPE(connection_t *client, char *path) {
     
     return stor_or_append(client, path, vrt_fopen(client->cwd, path, "ab"));
 }
 
-static int32_t ftp_REST(client_t *client, char *offset_str) {
+static int32_t ftp_REST(connection_t *client, char *offset_str) {
     off_t offset;
     if (sscanf(offset_str, "%lli", &offset) < 1 || offset < 0) {
         return write_reply(client, 501, "Syntax error in parameters.");
@@ -732,13 +742,13 @@ static int32_t ftp_REST(client_t *client, char *offset_str) {
     return write_reply(client, 350, msg);
 }
 
-static int32_t ftp_SITE_LOADER(client_t *client, char *rest UNUSED) {
+static int32_t ftp_SITE_LOADER(connection_t *client, char *rest UNUSED) {
     int32_t result = write_reply(client, 200, "Exiting to loader.");
     //set_reset_flag();
     return result;
 }
 
-static int32_t ftp_SITE_CLEAR(client_t *client, char *rest UNUSED) {
+static int32_t ftp_SITE_CLEAR(connection_t *client, char *rest UNUSED) {
     int32_t result = write_reply(client, 200, "Cleared.");
     uint32_t i;
     for (i = 0; i < 18; i++) WHBLogPrintf("\n");
@@ -750,7 +760,7 @@ static int32_t ftp_SITE_CLEAR(client_t *client, char *rest UNUSED) {
     This is implemented as a no-op to prevent some FTP clients
     from displaying skip/abort/retry type prompts.
 */
-static int32_t ftp_SITE_CHMOD(client_t *client, char *rest UNUSED) {
+static int32_t ftp_SITE_CHMOD(connection_t *client, char *rest UNUSED) {
     // compute virtual path /usb/... in a string allocate on the stack
     char vPath[MAXPATHLEN+1] = "";
     sprintf(vPath, "%s", client->cwd);
@@ -765,36 +775,36 @@ static int32_t ftp_SITE_CHMOD(client_t *client, char *rest UNUSED) {
     return write_reply(client, 250, "SITE CHMOD command ok.");
 }
 
-static int32_t ftp_SITE_PASSWD(client_t *client, char *new_password) {
+static int32_t ftp_SITE_PASSWD(connection_t *client, char *new_password) {
     set_ftp_password(new_password);
     return write_reply(client, 200, "Password changed.");
 }
 
-static int32_t ftp_SITE_NOPASSWD(client_t *client, char *rest UNUSED) {
+static int32_t ftp_SITE_NOPASSWD(connection_t *client, char *rest UNUSED) {
     set_ftp_password(NULL);
     return write_reply(client, 200, "Authentication disabled.");
 }
 
-static int32_t ftp_SITE_EJECT(client_t *client, char *rest UNUSED) {
+static int32_t ftp_SITE_EJECT(connection_t *client, char *rest UNUSED) {
     //if (dvd_eject()) return write_reply(client, 550, "Unable to eject DVD.");
     return write_reply(client, 200, "DVD ejected.");
 }
 
-static int32_t ftp_SITE_MOUNT(client_t *client, char *path UNUSED) {
+static int32_t ftp_SITE_MOUNT(connection_t *client, char *path UNUSED) {
     //if (!mount_virtual(path)) return write_reply(client, 550, "Unable to mount.");
     return write_reply(client, 250, "Mounted.");
 }
 
-static int32_t ftp_SITE_UNMOUNT(client_t *client, char *path UNUSED) {
+static int32_t ftp_SITE_UNMOUNT(connection_t *client, char *path UNUSED) {
     //if (!unmount_virtual(path)) return write_reply(client, 550, "Unable to unmount.");
     return write_reply(client, 250, "Unmounted.");
 }
 
-static int32_t ftp_SITE_UNKNOWN(client_t *client, char *rest UNUSED) {
+static int32_t ftp_SITE_UNKNOWN(connection_t *client, char *rest UNUSED) {
     return write_reply(client, 501, "Unknown SITE command.");
 }
 
-static int32_t ftp_SITE_LOAD(client_t *client, char *path UNUSED) {
+static int32_t ftp_SITE_LOAD(connection_t *client, char *path UNUSED) {
  //   FILE *f = vrt_fopen(client->cwd, path, "rb");
  //   if (!f) return write_reply(client, 550, strerror(errno));
  //   char *real_path = to_real_path(client->cwd, path);
@@ -806,9 +816,9 @@ static int32_t ftp_SITE_LOAD(client_t *client, char *path UNUSED) {
     return write_reply(client, 500, "Unable to load.");
 }
 
-typedef int32_t (*ftp_command_handler)(client_t *client, char *args);
+typedef int32_t (*ftp_command_handler)(connection_t *client, char *args);
 
-static int32_t dispatch_to_handler(client_t *client, char *cmd_line, const char **commands, const ftp_command_handler *handlers) {
+static int32_t dispatch_to_handler(connection_t *client, char *cmd_line, const char **commands, const ftp_command_handler *handlers) {
     char cmd[FTP_MSG_BUFFER_SIZE] = "", rest[FTP_MSG_BUFFER_SIZE] = "";
     char *args[] = { cmd, rest };
     split(cmd_line, ' ', 1, args);
@@ -822,23 +832,23 @@ static int32_t dispatch_to_handler(client_t *client, char *cmd_line, const char 
 static const char *site_commands[] = { "LOADER", "CLEAR", "CHMOD", "PASSWD", "NOPASSWD", "EJECT", "MOUNT", "UNMOUNT", "LOAD", NULL };
 static const ftp_command_handler site_handlers[] = { ftp_SITE_LOADER, ftp_SITE_CLEAR, ftp_SITE_CHMOD, ftp_SITE_PASSWD, ftp_SITE_NOPASSWD, ftp_SITE_EJECT, ftp_SITE_MOUNT, ftp_SITE_UNMOUNT, ftp_SITE_LOAD, ftp_SITE_UNKNOWN };
 
-static int32_t ftp_SITE(client_t *client, char *cmd_line) {
+static int32_t ftp_SITE(connection_t *client, char *cmd_line) {
     return dispatch_to_handler(client, cmd_line, site_commands, site_handlers);
 }
 
-static int32_t ftp_NOOP(client_t *client, char *rest UNUSED) {
+static int32_t ftp_NOOP(connection_t *client, char *rest UNUSED) {
     return write_reply(client, 200, "NOOP command successful.");
 }
 
-static int32_t ftp_SUPERFLUOUS(client_t *client, char *rest UNUSED) {
+static int32_t ftp_SUPERFLUOUS(connection_t *client, char *rest UNUSED) {
     return write_reply(client, 202, "Command not implemented, superfluous at this site.");
 }
 
-static int32_t ftp_NEEDAUTH(client_t *client, char *rest UNUSED) {
+static int32_t ftp_NEEDAUTH(connection_t *client, char *rest UNUSED) {
     return write_reply(client, 530, "Please login with USER and PASS.");
 }
 
-static int32_t ftp_UNKNOWN(client_t *client, char *rest UNUSED) {
+static int32_t ftp_UNKNOWN(connection_t *client, char *rest UNUSED) {
     return write_reply(client, 502, "Command not implemented.");
 }
 
@@ -863,12 +873,12 @@ static const ftp_command_handler authenticated_handlers[] = {
 /*
     returns negative to signal an error that requires closing the connection
 */
-static int32_t process_command(client_t *client, char *cmd_line) {
+static int32_t process_command(connection_t *client, char *cmd_line) {
     if (strlen(cmd_line) == 0) {
         return 0;
     }
 
-    WHBLogPrintf("< %s", cmd_line);
+    if (verboseMode) WHBLogPrintf("< %s", cmd_line);
 
     const char **commands = unauthenticated_commands;
     const ftp_command_handler *handlers = unauthenticated_handlers;
@@ -881,7 +891,7 @@ static int32_t process_command(client_t *client, char *cmd_line) {
     return dispatch_to_handler(client, cmd_line, commands, handlers);
 }
 
-static void cleanup_data_resources(client_t *client) {
+static void cleanup_data_resources(connection_t *client) {
     if (client->data_socket >= 0 && client->data_socket != client->passive_socket) {
         network_close_blocking(client->data_socket);
     }
@@ -896,28 +906,28 @@ static void cleanup_data_resources(client_t *client) {
     client->data_connection_timer = 0;
 }
 
-static void cleanup_client(client_t *client) {
+static void cleanup_client(connection_t *client) {
     network_close_blocking(client->socket);
     cleanup_data_resources(client);
     close_passive_socket(client);
     int client_index;
     for (client_index = 0; client_index < NB_SIMULTANEOUS_CONNECTIONS; client_index++) {
-        if (clients[client_index] == client) {
-            clients[client_index] = NULL;
+        if (connections[client_index] == client) {
+            connections[client_index] = NULL;
             break;
         }
     }
     free(client);
     nbConnections--;
-    WHBLogPrintf("  Client disconnected.");
+    WHBLogPrintf("Client %s disconnected.", clientIp);
 }
 
 void cleanup_ftp() {
     int client_index;
     for (client_index = 0; client_index < NB_SIMULTANEOUS_CONNECTIONS; client_index++) {
-        client_t *client = clients[client_index];
+        connection_t *client = connections[client_index];
         if (client) {
-            write_reply(client, 421, "Closing remaining active clients connection.");
+            write_reply(client, 421, "Closing remaining active connections connection.");
             cleanup_client(client);
         }
     }
@@ -937,11 +947,11 @@ static bool process_getClients() {
         if (nbConnections == 0) strcpy(clientIp,inet_ntoa(client_address.sin_addr));
         if (strcmp(clientIp,inet_ntoa(client_address.sin_addr)) !=0) { 
             
-            WHBLogPrintf("! WARNING : %d already connected, close all his connections before trying from %d", clientIp, inet_ntoa(client_address.sin_addr));
+            WHBLogPrintf("! WARNING : %s already connected, close all his connections", clientIp);
             network_close(peer);
             return true;
         }
-        WHBLogPrintf("  Accepted connection from %s!\n", inet_ntoa(client_address.sin_addr));
+        WHBLogPrintf("Accepted connection from %s!\n", inet_ntoa(client_address.sin_addr));
 
         if (nbConnections == NB_SIMULTANEOUS_CONNECTIONS) {
             WHBLogPrintf("! WARNING : Maximum connections number reached (%d), retry after ends one current transfert", NB_SIMULTANEOUS_CONNECTIONS);
@@ -949,7 +959,7 @@ static bool process_getClients() {
             return true;
         }
 
-        client_t *client = malloc(sizeof(client_t));
+        connection_t *client = malloc(sizeof(connection_t));
         if (!client) {
             WHBLogPrintf("! ERROR : Could not allocate memory for client state, not accepting client.\n");
             network_close(peer);
@@ -976,19 +986,28 @@ static bool process_getClients() {
             network_close_blocking(peer);
             free(client);
         } else {
-            for (client_index = 0; client_index < NB_SIMULTANEOUS_CONNECTIONS; client_index++) {
-                if (!clients[client_index]) {
-                    clients[client_index] = client;
-                    break;
+            
+            if (nbConnections == NB_SIMULTANEOUS_CONNECTIONS) {
+                char msg[FTP_MSG_BUFFER_SIZE];                
+                sprintf(msg, "Maximum connections number reached (%d), retry after ends one current transfert", NB_SIMULTANEOUS_CONNECTIONS);
+                write_reply(client, 520, msg);
+                WHBLogPrintf("! WARNING : %s", msg);
+            } else {
+                
+                for (client_index = 0; client_index < NB_SIMULTANEOUS_CONNECTIONS; client_index++) {
+                    if (!connections[client_index]) {
+                        connections[client_index] = client;
+                        break;
+                    }
                 }
+                nbConnections++;
             }
-            nbConnections++;
         }
     }
     return true;
 }
 
-static void process_data_events(client_t *client) {
+static void process_data_events(connection_t *client) {
     int32_t result;
     if (!client->data_connection_connected) {
         if (client->passive_socket >= 0) {
@@ -1013,18 +1032,22 @@ static void process_data_events(client_t *client) {
         }
         if (client->data_connection_connected) {
             result = 1;
-            WHBLogPrintf("  Connected to client!  Transferring data...");
+            WHBLogPrintf("Transferring data to %s...", clientIp);
         } else if (OSGetTick() > (int) client->data_connection_timer) {
             result = -2;
             WHBLogPrintf("! ERROR : Timed out waiting for data connection.");
         }
     } else {
         result = client->data_callback(client->data_socket, client->data_connection_callback_arg);
+        if (result < 0 && result != -EAGAIN && result != -ENODATA) {
+            WHBLogPrintf("! WARNING : data transfer callback failed , socket error = %d", result);
+        }
     }
 
-    if (result <= 0 && result != -EAGAIN) {
+    if (result <= 0 && result != -EAGAIN && result != -ENODATA) {
         cleanup_data_resources(client);
         if (result < 0) {
+            WHBLogPrintf("! ERROR : transfer failed, socket error = %d", result);            
             result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
         } else {
             result = write_reply(client, 226, "Closing data connection, transfer successful.");
@@ -1035,7 +1058,7 @@ static void process_data_events(client_t *client) {
     }
 }
 
-static void process_control_events(client_t *client) {
+static void process_control_events(connection_t *client) {
     int32_t bytes_read;
     while (client->offset < (FTP_MSG_BUFFER_SIZE - 1)) {
         if (client->data_callback) {
@@ -1055,7 +1078,7 @@ static void process_control_events(client_t *client) {
         client->buf[client->offset] = '\0';
 
         if (strchr(offset_buf, '\0') != (client->buf + client->offset)) {
-            WHBLogPrintf("! WNG : Received a null byte from client, closing connection ;-)"); // i have decided this isn't allowed =P
+            WHBLogPrintf("! WARNING : Received a null byte from client, closing connection ;-)"); // i have decided this isn't allowed =P
             goto recv_loop_end;
         }
 
@@ -1064,7 +1087,7 @@ static void process_control_events(client_t *client) {
         for (next = client->buf; (end = strstr(next, CRLF)) && !client->data_callback; next = end + CRLF_LENGTH) {
             *end = '\0';
             if (strchr(next, '\n')) {
-                WHBLogPrintf("! WNG : Received a line-feed from client without preceding carriage return, closing connection ;-)"); // i have decided this isn't allowed =P
+                WHBLogPrintf("! WARNING : Received a line-feed from client without preceding carriage return, closing connection ;-)"); // i have decided this isn't allowed =P
                 goto recv_loop_end;
             }
 
@@ -1104,7 +1127,7 @@ bool process_ftp_events() {
     bool network_down = !process_getClients();    
     uint32_t client_index;
     for (client_index = 0; client_index < nbConnections; client_index++) {
-        client_t *client = clients[client_index];
+        connection_t *client = connections[client_index];
         if (client) {
             if (client->data_callback) {
                 process_data_events(client);
