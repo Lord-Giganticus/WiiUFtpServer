@@ -1,5 +1,5 @@
 # WiiUFtpServer
-A new FTP server for the Wii-U that fix files injection, display files timestamps correctly and much more faster than others.
+A FTP server for the Wii-U (based on FTPiiU-Everywhere code) that fix files injection, display files timestamps correctly and much more faster than others.
 
 <p align="center">
   <img src="WiiUFtpServer.png">
@@ -62,4 +62,4 @@ It creates a HBL App under \_sdCard\wiiu\apps\WiiUFtpServer
 
 To create the channel version (HBC), use "toWUP\createChannel.bat"
 
-Then copy the \_sdCard content to your SD card.
+Then copy the \_sdCard folder content to the root of your SD card.
