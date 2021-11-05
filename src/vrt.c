@@ -1,7 +1,32 @@
+/*
+
+Copyright (C) 2008 Joseph Jordan <joe.ftpii@psychlaw.com.au>
+This work is derived from Daniel Ehlers' <danielehlers@mindeye.net> srg_vrt branch.
+
+This software is provided 'as-is', without any express or implied warranty.
+In no event will the authors be held liable for any damages arising from
+the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1.The origin of this software must not be misrepresented; you must not
+claim that you wrote the original software. If you use this software in a
+product, an acknowledgment in the product documentation would be
+appreciated but is not required.
+
+2.Altered source versions must be plainly marked as such, and must not be
+misrepresented as being the original software.
+
+3.This notice may not be removed or altered from any source distribution.
+
+*/
 /****************************************************************************
   * WiiUFtpServer
-  * 2021/04/05:V1.0.0:Laf111: import ftp-everywhere code
+  * 2021-10-20:Laf111:V6-3
  ***************************************************************************/
+
 #include <errno.h>
 #include <malloc.h>
 #include <stdarg.h>
@@ -14,6 +39,8 @@
 #include "virtualpath.h"
 #include "vrt.h"
 #include "net.h"
+
+extern void display(const char *fmt, ...);
 
 static char *virtual_abspath(char *virtual_cwd, char *virtual_path) {
     char *path;
@@ -194,8 +221,8 @@ int vrt_stat(char *cwd, char *path, struct stat *st) {
         st->st_size = 31337;
         return 0;
     }
-    
-/*     int srcFd = -1;        
+
+/*     int srcFd = -1;
 
     char *vpath=NULL;
     size_t path_size = strlen(cwd) + strlen(path) + 1;
@@ -206,18 +233,18 @@ int vrt_stat(char *cwd, char *path, struct stat *st) {
 
         int fsaFd=getFSAFD();
         IOSUHAX_FSA_OpenFile(fsaFd, vpath, "rb", &srcFd);
-        
+
         IOSUHAX_FSA_Stat fStat;
-        IOSUHAX_FSA_StatFile(fsaFd, srcFd, &fStat);        
-        
-        st->st_size = fStat.size;    
+        IOSUHAX_FSA_StatFile(fsaFd, srcFd, &fStat);
+
+        st->st_size = fStat.size;
         st->st_ctime = fStat.created;
         st->st_mtime = fStat.modified;
-        
+
 
         IOSUHAX_FSA_CloseFile(fsaFd, srcFd);
     } */
-    
+
     free(real_path);
     return (int)with_virtual_path(cwd, stat, path, -1, st, NULL);
 }
@@ -243,6 +270,7 @@ int vrt_chdir(char *cwd, char *path) {
     }
     char *abspath = virtual_abspath(cwd, path);
     if (!abspath) {
+        display("!ERROR : vrt::virtual_abspath failed");
         errno = ENOMEM;
         return -1;
     }

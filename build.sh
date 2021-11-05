@@ -4,7 +4,7 @@
 #  WiiUFtpServer (fork of FTP everywhere by Laf111@2021)
 # ***************************************************************************/
 VERSION_MAJOR=6
-VERSION_MINOR=0
+VERSION_MINOR=3
 VERSION_PATCH=0
 export WiiuFtpServerVersion=$VERSION_MAJOR.$VERSION_MINOR.$VERSION_PATCH
 
@@ -55,7 +55,7 @@ make
 if [ $? -eq 0 ]; then
     # set version in ./_sdCard/wiiu/apps/WiiUFtpServer/meta.xml
     sed -i "s|<version>.*<|<version>$WiiuFtpServerVersion<|g" ./_sdCard/wiiu/apps/WiiUFtpServer/meta.xml
-    
+    find ./_sdCard/wiiu/apps/WiiUFtpServer/NandBackup -name dummy.txt -exec rm -f {} \; > /dev/null 2>&1
     sed -i "s|release_date>00000000000000|release_date>$buildDate|g" ./_sdCard/wiiu/apps/WiiUFtpServer/meta.xml
 
     echo -----------------------------------------------------

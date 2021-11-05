@@ -1,6 +1,6 @@
 /****************************************************************************
   * WiiUFtpServer
-  * 2021/04/22:V1.1.0:Laf111: creation
+  * 2021-10-20:Laf111:V6-3
  ***************************************************************************/
 #ifndef _RECEIVEDFILES_H_
 #define _RECEIVEDFILES_H_
@@ -12,7 +12,7 @@ extern "C"{
 struct ENTRY {
     // volume path for IOSUHAX /vol/storage_usb01/...
     char *path;
-    // file descriptor 
+    // file descriptor
     int fd;
 };
 
