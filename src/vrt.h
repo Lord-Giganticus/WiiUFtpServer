@@ -24,7 +24,7 @@ misrepresented as being the original software.
 */
 /****************************************************************************
   * WiiUFtpServer
-  * 2021-10-20:Laf111:V6-3
+  * 2021-12-05:Laf111:V7-0
  ***************************************************************************/
 
 #ifndef _VRT_H_
@@ -35,6 +35,7 @@ extern "C"{
 #endif
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <sys/stat.h>
 #include <sys/param.h>
@@ -51,6 +52,7 @@ char *to_real_path(char *virtual_cwd, char *virtual_path);
 
 FILE *vrt_fopen(char *cwd, char *path, char *mode);
 int vrt_stat(char *cwd, char *path, struct stat *st);
+int vrt_checkdir(char *cwd, char *path);
 int vrt_chdir(char *cwd, char *path);
 int vrt_unlink(char *cwd, char *path);
 int vrt_mkdir(char *cwd, char *path, mode_t mode);

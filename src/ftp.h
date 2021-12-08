@@ -25,7 +25,7 @@ misrepresented as being the original software.
 */
 /****************************************************************************
   * WiiUFtpServer
-  * 2021-10-20:Laf111:V6-3
+  * 2021-12-05:Laf111:V7-0: complete the some TODO left
  ***************************************************************************/
 
 #ifndef _FTP_H_
@@ -40,18 +40,22 @@ misrepresented as being the original software.
 
 #define FTP_PORT            21
 
+// Number max of simultaneous connections from the client : 
+// 1 for communication with the client + NB_SIMULTANEOUS_TRANSFERS
+#define FTP_NB_SIMULTANEOUS_TRANSFERS 1+NB_SIMULTANEOUS_TRANSFERS
+
 #ifdef __cplusplus
 extern "C"{
 #endif
 
-void setVerboseMode(bool flag);
+void    setVerboseMode(bool flag);
 int32_t create_server(uint16_t port);
-bool process_ftp_events();
-void cleanup_ftp();
+bool    process_ftp_events();
+void    cleanup_ftp();
 
-void setOsTime(struct tm *tmTime);
-void setFsaFd(int hfd);
-int getFsaFd();
+void    setOsTime(struct tm *tmTime);
+void    setFsaFd(int hfd);
+int     getFsaFd();
 
 #ifdef __cplusplus
 }

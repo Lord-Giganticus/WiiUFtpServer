@@ -1,6 +1,6 @@
 /****************************************************************************
   * WiiUFtpServer
-  * 2021-10-20:Laf111:V6-3
+  * 2021-12-05:Laf111:V7-0
  ***************************************************************************/
 #include <stdbool.h>
 #include <string.h>
@@ -33,7 +33,7 @@ static bool checkButton(VPADStatus *vpadStatus, int button) {
         OSSleepTicks(OSMillisecondsToTicks(1));
         cpt=cpt+1;
     }
-    if (cpt >= 5000) display("! WARNING : controller A BUTTON check timed out !");
+    if (cpt >= 5000) display("~ WARNING : controller A BUTTON check timed out !");
     if (!exitWhile) display("! ERROR : controller A BUTTON check failed !");
     
     return status;

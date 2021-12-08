@@ -30,17 +30,18 @@ INCLUDES	:=	src
 #-------------------------------------------------------------------------------
 # options for code generation
 #-------------------------------------------------------------------------------
-CFLAGS	:=	$(MACHDEP) -Ofast -flto=auto -fno-fat-lto-objects \
-				-fuse-linker-plugin -pipe -DIOAPI_NO_64 \
+CFLAGS	:=	-mrvl -mcpu=750 -meabi -mhard-float -ffast-math \
+                -Ofast -Wall -Wextra -Wno-strict-aliasing \
                 -D__WIIU__ -D__WUT__ \
                 -DVERSION_STRING="\"WiiU Ftp Server v$(WiiuFtpServerVersion)\""
+                
+# keep it, the log file is disabled by default and enabled if verbose mode is activated
+#CFLAGS	+=	-DLOG2FILE
 
-CFLAGS	+=	$(INCLUDE)
-# enable log to file storage_sdcard/wiiu/apps/WiiuFtpServer/WiiuFtpServer.log
-CFLAGS	+=	-DLOG2FILE
 # enable controller check 
 #CFLAGS	+=	-DCHECK_CONTROLLER
 
+CFLAGS	+=	$(INCLUDE)
 CXXFLAGS	:= $(CFLAGS)
 
 ASFLAGS	:=	-g $(ARCH)

@@ -1,6 +1,6 @@
 /****************************************************************************
   * WiiUFtpServer
-  * 2021-10-20:Laf111:V6-3
+  * 2021-12-05:Laf111:V7-0
  ***************************************************************************/
 #ifndef _NANDBACKUP_H_
 #define _NANDBACKUP_H_
@@ -22,8 +22,6 @@
 #define FSA_STATUS_NOT_EMPTY                -24
 
 #define DIR_ENTRY_IS_DIRECTORY              0x80000000
-
-#define BUS_SPEED                           248625000
 
 void setFsaFdCopyFiles(int fd);
 
